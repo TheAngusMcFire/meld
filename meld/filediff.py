@@ -1535,6 +1535,7 @@ class FileDiff(Gtk.Box, MeldDoc):
 
         save_button = Gtk.Button.new_with_label(_("Save"))
         save_button.get_style_context().add_class('suggested-action')
+        save_button.set_tooltip_text(_("Save comment (Ctrl+Enter)"))
 
         def on_save(button):
             buf = entry.get_buffer()
@@ -1542,6 +1543,16 @@ class FileDiff(Gtk.Box, MeldDoc):
                 buf.get_start_iter(), buf.get_end_iter(), False)
             commit(text)
 
+        def on_entry_key_press(widget, event):
+            enter_keys = (
+                Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_ISO_Enter)
+            ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
+            if event.keyval in enter_keys and ctrl:
+                on_save(None)
+                return True
+            return False
+
+        entry.connect('key-press-event', on_entry_key_press)
         save_button.connect('clicked', on_save)
         button_box.add(save_button)
         box.add(button_box)

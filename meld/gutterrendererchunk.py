@@ -223,7 +223,7 @@ class GutterRendererChunkLines(
         gfile = getattr(getattr(buf, 'data', None), 'gfile', None)
         return gfile.get_path() if gfile else None
 
-    def draw_comment_marker(self, context, cell_area, start):
+    def draw_comment_marker(self, context, background_area, start):
         abspath = self._comment_abspath()
         if not abspath:
             return
@@ -231,10 +231,11 @@ class GutterRendererChunkLines(
         if line not in review_comments.lines_for(abspath):
             return
 
-        radius = 2.5
-        cx = cell_area.x + radius + 1
-        cy = cell_area.y + cell_area.height / 2
-        Gdk.cairo_set_source_rgba(context, self.line_colors['conflict'])
+        radius = 3
+        cx = background_area.x + radius + 1
+        cy = background_area.y + background_area.height / 2
+        # Solid amber accent so the annotation is obvious against any theme.
+        context.set_source_rgba(0.96, 0.62, 0.04, 1.0)
         context.arc(cx, cy, radius, 0, 2 * math.pi)
         context.fill()
 
@@ -244,7 +245,7 @@ class GutterRendererChunkLines(
         self.draw_chunks(
             context, background_area, cell_area, start, end, state)
         if self.comment_activatable:
-            self.draw_comment_marker(context, cell_area, start)
+            self.draw_comment_marker(context, background_area, start)
 
     def do_query_data(self, start, end, state):
         self.query_chunks(start, end, state)
