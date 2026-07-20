@@ -37,6 +37,7 @@ from meld.menuhelpers import replace_menu_section
 from meld.misc import guess_if_remote_x11
 from meld.newdifftab import NewDiffTab
 from meld.recent import RecentType, recent_comparisons
+from meld.review import review_comments
 from meld.settings import get_meld_settings
 from meld.task import LifoScheduler
 from meld.ui.notebooklabel import NotebookLabel
@@ -70,6 +71,8 @@ class MeldWindow(Gtk.ApplicationWindow):
             ("close", self.action_close),
             ("new-tab", self.action_new_tab),
             ("stop", self.action_stop),
+            ("copy-review-comments", self.action_copy_review_comments),
+            ("clear-review-comments", self.action_clear_review_comments),
         )
         for name, callback in actions:
             action = Gio.SimpleAction.new(name, None)
@@ -93,6 +96,10 @@ class MeldWindow(Gtk.ApplicationWindow):
 
         # Initialise sensitivity for important actions
         self.lookup_action('stop').set_enabled(False)
+
+        # Review-comment actions are only useful once comments exist.
+        review_comments.connect('changed', self.on_review_comments_changed)
+        self.on_review_comments_changed(review_comments)
 
         # Fake out the spinner on Windows or X11 forwarding. See Gitlab
         # issues #133 and #507.
@@ -283,6 +290,24 @@ class MeldWindow(Gtk.ApplicationWindow):
         # TODO: This is the only window-level action we have that still
         # works on the "current" document like this.
         self.current_doc().action_stop()
+
+    def on_review_comments_changed(self, store, *args):
+        has_comments = store.count() > 0
+        for name in ('copy-review-comments', 'clear-review-comments'):
+            action = self.lookup_action(name)
+            if action:
+                action.set_enabled(has_comments)
+
+    def action_copy_review_comments(self, *args):
+        text = review_comments.as_text()
+        if not text:
+            return
+        clip = Gtk.Clipboard.get_default(Gdk.Display.get_default())
+        clip.set_text(text, -1)
+        clip.store()
+
+    def action_clear_review_comments(self, *args):
+        review_comments.clear()
 
     def page_removed(self, page, status):
         if hasattr(page, 'scheduler'):

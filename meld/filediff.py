@@ -51,6 +51,7 @@ from meld.menuhelpers import replace_menu_section
 from meld.misc import user_critical, with_focused_pane
 from meld.patchdialog import PatchDialog
 from meld.recent import RecentType
+from meld.review import review_comments
 from meld.settings import bind_settings, get_meld_settings
 from meld.sourceview import (
     LanguageManager,
@@ -508,6 +509,10 @@ class FileDiff(Gtk.Box, MeldDoc):
             gutter = t.get_gutter(window)
             gutter.insert(renderer, -30)
             t.line_renderer = renderer
+            # Only the rightmost ("after") pane's line numbers are clickable
+            # for adding review comments.
+            renderer.comment_activate_cb = self.on_comment_gutter_activate
+            renderer.comment_activatable = (pane == self.num_panes - 1)
 
         self.connect("notify::ignore-blank-lines", self.refresh_comparison)
 
@@ -1468,6 +1473,84 @@ class FileDiff(Gtk.Box, MeldDoc):
             self.popup_menu.popup_at_pointer(event)
             return True
         return False
+
+    def on_comment_gutter_activate(self, pane, line0):
+        gfile = self.textbuffer[pane].data.gfile
+        abspath = gfile.get_path() if gfile else None
+        if not abspath:
+            return
+        it = self.textbuffer[pane].get_iter_at_line(line0)
+        self.show_comment_popover(pane, it, abspath, line0 + 1)
+
+    def show_comment_popover(self, pane, it, abspath, line):
+        textview = self.textview[pane]
+
+        location = textview.get_iter_location(it)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y = textview.buffer_to_window_coords(
+            Gtk.TextWindowType.WIDGET, location.x, location.y)
+        rect.width, rect.height = 1, location.height
+
+        popover = Gtk.Popover()
+        popover.set_relative_to(textview)
+        popover.set_pointing_to(rect)
+        popover.set_position(Gtk.PositionType.RIGHT)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_border_width(6)
+
+        heading = Gtk.Label()
+        heading.set_markup('<b>{}</b>'.format(GLib.markup_escape_text(
+            _("Comment on {file}:{line}").format(
+                file=review_comments.relpath(abspath), line=line))))
+        heading.set_halign(Gtk.Align.START)
+        box.add(heading)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(
+            Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_size_request(320, 90)
+        scroller.set_shadow_type(Gtk.ShadowType.IN)
+        entry = Gtk.TextView()
+        entry.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        existing = review_comments.get_comment(abspath, line)
+        entry.get_buffer().set_text(existing)
+        scroller.add(entry)
+        box.add(scroller)
+
+        def commit(text):
+            review_comments.set_comment(abspath, line, text)
+            textview.line_renderer.queue_draw()
+            popover.popdown()
+
+        button_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        button_box.set_halign(Gtk.Align.END)
+
+        if existing:
+            delete_button = Gtk.Button.new_with_label(_("Delete"))
+            delete_button.get_style_context().add_class('destructive-action')
+            delete_button.connect('clicked', lambda b: commit(''))
+            button_box.add(delete_button)
+
+        save_button = Gtk.Button.new_with_label(_("Save"))
+        save_button.get_style_context().add_class('suggested-action')
+
+        def on_save(button):
+            buf = entry.get_buffer()
+            text = buf.get_text(
+                buf.get_start_iter(), buf.get_end_iter(), False)
+            commit(text)
+
+        save_button.connect('clicked', on_save)
+        button_box.add(save_button)
+        box.add(button_box)
+
+        box.show_all()
+        popover.add(box)
+        popover.connect('closed', lambda p: p.destroy())
+        popover.popup()
+        entry.grab_focus()
 
     def set_syncpoint_menuitem(self, pane):
         menu_actions = {

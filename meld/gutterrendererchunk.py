@@ -18,6 +18,7 @@ from typing import Any
 
 from gi.repository import Gdk, GtkSource, Pango
 
+from meld.review import review_comments
 from meld.settings import get_meld_settings
 from meld.style import get_common_theme
 from meld.ui.gtkutil import make_gdk_rgba
@@ -139,6 +140,13 @@ class GutterRendererChunkLines(
         self.num_line_digits = 0
         self.changed_handler_id = None
 
+        # When True, clicking a line number in this gutter is treated as a
+        # request to add/edit a code-review comment on that line, and lines
+        # that already have a comment are marked. Enabled per-pane by FileDiff,
+        # which also sets comment_activate_cb(pane, line) as the click handler.
+        self.comment_activatable = False
+        self.comment_activate_cb = None
+
         meld_settings = get_meld_settings()
         meld_settings.connect('changed', self.on_setting_changed)
         self.font_string = meld_settings.font.to_string()
@@ -200,11 +208,43 @@ class GutterRendererChunkLines(
         width, height = self._measure_markup(markup)
         self.set_size(width)
 
+    def do_query_activatable(self, it, area, event):
+        return self.comment_activatable
+
+    def do_activate(self, it, area, event):
+        if self.comment_activatable and self.comment_activate_cb:
+            self.comment_activate_cb(self.from_pane, it.get_line())
+
+    def _comment_abspath(self):
+        view = self.get_view()
+        if not view:
+            return None
+        buf = view.get_buffer()
+        gfile = getattr(getattr(buf, 'data', None), 'gfile', None)
+        return gfile.get_path() if gfile else None
+
+    def draw_comment_marker(self, context, cell_area, start):
+        abspath = self._comment_abspath()
+        if not abspath:
+            return
+        line = start.get_line() + 1
+        if line not in review_comments.lines_for(abspath):
+            return
+
+        radius = 2.5
+        cx = cell_area.x + radius + 1
+        cy = cell_area.y + cell_area.height / 2
+        Gdk.cairo_set_source_rgba(context, self.line_colors['conflict'])
+        context.arc(cx, cy, radius, 0, 2 * math.pi)
+        context.fill()
+
     def do_draw(self, context, background_area, cell_area, start, end, state):
         GtkSource.GutterRendererText.do_draw(
             self, context, background_area, cell_area, start, end, state)
         self.draw_chunks(
             context, background_area, cell_area, start, end, state)
+        if self.comment_activatable:
+            self.draw_comment_marker(context, cell_area, start)
 
     def do_query_data(self, start, end, state):
         self.query_chunks(start, end, state)

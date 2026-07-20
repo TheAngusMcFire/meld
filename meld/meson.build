@@ -28,6 +28,7 @@ folders = {
     'patchdialog.py',
     'preferences.py',
     'recent.py',
+    'review.py',
     'settings.py',
     'sourceview.py',
     'style.py',

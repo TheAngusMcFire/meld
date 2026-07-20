@@ -41,6 +41,7 @@ from meld.iohelpers import find_shared_parent_path, trash_or_confirm
 from meld.melddoc import MeldDoc
 from meld.misc import all_same, apply_text_filters, with_focused_pane
 from meld.recent import RecentType
+from meld.review import review_comments
 from meld.settings import bind_settings, get_meld_settings, settings
 from meld.treehelpers import refocus_deleted_path, tree_path_as_tuple
 from meld.ui.cellrenderers import (
@@ -894,6 +895,9 @@ class DirDiff(Gtk.Box, tree.TreeviewCommon, MeldDoc):
             if location and not isinstance(location, str):
                 locations[i] = location.decode(sys.getfilesystemencoding())
         locations = [os.path.abspath(loc) if loc else '' for loc in locations]
+
+        # Provide review-comment relative paths a base to resolve against.
+        review_comments.set_roots(locations)
 
         self.current_path = None
         self.marked = None
