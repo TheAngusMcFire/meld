@@ -129,6 +129,9 @@ class GutterRendererChunkLines(
         GtkSource.GutterRendererText, MeldGutterRenderer):
     __gtype_name__ = "GutterRendererChunkLines"
 
+    # Left-hand strip (px) reserved for the review-comment marker.
+    COMMENT_MARKER_WIDTH = 12
+
     def __init__(self, from_pane, to_pane, linediffer):
         super().__init__()
         self.set_renderer_defaults()
@@ -206,6 +209,10 @@ class GutterRendererChunkLines(
         self.num_line_digits = num_digits
         markup = "<b>%d</b>" % num_lines
         width, height = self._measure_markup(markup)
+        if self.comment_activatable:
+            # Reserve a strip on the left for the review-comment marker so it
+            # doesn't overlap the line numbers.
+            width += self.COMMENT_MARKER_WIDTH
         self.set_size(width)
 
     def do_query_activatable(self, it, area, event):
@@ -231,7 +238,8 @@ class GutterRendererChunkLines(
         if line not in review_comments.lines_for(abspath):
             return
 
-        radius = 3
+        radius = 2.5
+        # Draw within the reserved left strip, clear of the line numbers.
         cx = background_area.x + radius + 1
         cy = background_area.y + background_area.height / 2
         # Solid amber accent so the annotation is obvious against any theme.
